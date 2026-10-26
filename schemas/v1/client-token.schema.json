@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "mybeast-errors:schemas/v1/client-token.schema.json",
+    "title": "Client token claims, v1",
+    "description": "The body of a client token: a JWT (HS256) the host signs with one of its project's signing keys and hands to its browser pages. Only the host holds the key, so the browser cannot change a claim. The HMAC key is the secret part of MYBEAST_ERRORS_SIGNING_KEY (after the first dot) as a UTF-8 string, not decoded. Header: client-token-header.schema.json.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["v", "iss", "sub", "acct", "env", "rec", "mask", "consent_at", "internal", "test", "iat", "exp"],
+    "properties": {
+        "v": { "const": 1, "description": "Claims version." },
+        "iss": { "type": "string", "pattern": "^pk_[a-z0-9]{24}$", "description": "The project's public key." },
+        "sub": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$", "description": "The person: the host's own user id. Never a name or an e-mail." },
+        "acct": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,64}$", "description": "The account (workspace, organisation) they work in now, or null." },
+        "env": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$", "description": "The host's environment: production, staging, local, …" },
+        "rec": { "type": "boolean", "description": "This page may be recorded: the person said yes and the host allows it here." },
+        "mask": { "type": "boolean", "description": "Recordings are masked in the browser; the service scans them for leaks." },
+        "consent_at": { "type": ["integer", "null"], "minimum": 1, "description": "When the person said yes to recording, unix milliseconds. A chunk from before it is refused. Required when rec is true." },
+        "internal": { "type": "boolean", "description": "Staff, demo or test account of the host: never counted, never alerted about." },
+        "test": { "type": "boolean", "description": "A synthetic account: its recordings may be exported for the host's masking canary." },
+        "iat": { "type": "integer", "description": "Issued at, unix seconds." },
+        "exp": { "type": "integer", "description": "Expires at, unix seconds; at most 3600 after iat (SDKs mint 1800)." }
+    },
+    "if": { "properties": { "rec": { "const": true } } },
+    "then": { "properties": { "consent_at": { "type": "integer" } } }
+}

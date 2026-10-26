@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "mybeast-errors:schemas/v1/client-token-header.schema.json",
+    "title": "Client token header, v1",
+    "description": "HS256 only: any other alg, \"none\" included, is refused. kid names the signing key (its public id, the part of MYBEAST_ERRORS_SIGNING_KEY before the first dot), so a host can rotate keys with two active at once.",
+    "type": "object",
+    "required": ["typ", "alg", "kid"],
+    "properties": {
+        "typ": { "const": "JWT" },
+        "alg": { "const": "HS256" },
+        "kid": { "type": "string", "pattern": "^sig_[a-z0-9]{16}$" }
+    }
+}

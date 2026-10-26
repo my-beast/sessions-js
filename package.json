@@ -1,0 +1,24 @@
+{
+    "name": "@mybeast/sessions",
+    "version": "0.1.0",
+    "description": "Browser SDK for sessions.my-beast.com: session recordings of your pages, with the person's yes.",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.js",
+        "./mask": "./src/mask.js"
+    },
+    "files": ["src", "schemas"],
+    "scripts": {
+        "test": "node --test"
+    },
+    "dependencies": {
+        "@rrweb/record": "2.1.7"
+    },
+    "devDependencies": {
+        "ajv": "8.17.1"
+    },
+    "engines": {
+        "node": ">=20"
+    }
+}

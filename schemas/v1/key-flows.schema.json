@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://sessions.my-beast.com/schemas/v1/key-flows.schema.json",
+    "title": "The host's key flows",
+    "description": "The body of PUT /api/v1/flows (server secret): every key flow of the project, replacing the ones there (a flow left out is retired; its runs are kept). Defined in the host's code and pushed at deploy (mybeast:sessions-flows). Keep a flow's slug and its steps' keys: runs and stuck points name them; a new step at the end is safe.",
+    "type": "object",
+    "required": ["flows"],
+    "additionalProperties": false,
+    "properties": {
+        "flows": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+                "type": "object",
+                "required": ["slug", "name", "steps"],
+                "additionalProperties": false,
+                "properties": {
+                    "slug": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+                    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+                    "give_up_after_hours": { "type": "integer", "minimum": 1, "maximum": 720, "description": "A run with no new step for this long has been given up (default 24)." },
+                    "new_account_days": { "type": ["integer", "null"], "minimum": 1, "maximum": 90, "description": "A milestone flow (a first run): it starts at a new person's first step - their account at most this many days old (the steps' subject_since) - never twice. Its first step is a start step." },
+                    "steps": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 20,
+                        "items": {
+                            "type": "object",
+                            "required": ["key", "label", "kind"],
+                            "additionalProperties": false,
+                            "properties": {
+                                "key": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+                                "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+                                "kind": { "enum": ["visit", "save", "start"], "description": "Reached by a visit, or a save, of one of the routes; start: a milestone flow's first step, reached when its run starts (no routes)." },
+                                "routes": { "type": "array", "maxItems": 50, "items": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,120}$" }, "description": "Route NAMES, as the steps carry them. A visit or save step names one at least; a start step none. Beyond the schema, the service also checks: a start step only first, and a flow begins with one exactly when it is a milestone flow (new_account_days)." }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

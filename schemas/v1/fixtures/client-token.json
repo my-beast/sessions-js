@@ -1,0 +1,21 @@
+{
+    "description": "A client token minted from these claims with this key, byte for byte: the PHP SDK must mint exactly `token`, the service must accept it at a moment between iat and exp, and the JS SDK must read `claims` back out of it. The key is a fixture and signs nothing real.",
+    "signing_key": "sig_fixture000000001.fixture-signing-secret-for-tests-only-not-real-0001",
+    "public_key": "pk_fixture00000000000000000",
+    "header": { "typ": "JWT", "alg": "HS256", "kid": "sig_fixture000000001" },
+    "claims": {
+        "v": 1,
+        "iss": "pk_fixture00000000000000000",
+        "sub": "01a17862-0000-7000-8000-000000000001",
+        "acct": "01a17862-0000-7000-8000-0000000000aa",
+        "env": "production",
+        "rec": true,
+        "mask": true,
+        "consent_at": 1792990000000,
+        "internal": false,
+        "test": false,
+        "iat": 1793000000,
+        "exp": 1793001800
+    },
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InNpZ19maXh0dXJlMDAwMDAwMDAxIn0.eyJ2IjoxLCJpc3MiOiJwa19maXh0dXJlMDAwMDAwMDAwMDAwMDAwMDAiLCJzdWIiOiIwMWExNzg2Mi0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJhY2N0IjoiMDFhMTc4NjItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGFhIiwiZW52IjoicHJvZHVjdGlvbiIsInJlYyI6dHJ1ZSwibWFzayI6dHJ1ZSwiY29uc2VudF9hdCI6MTc5Mjk5MDAwMDAwMCwiaW50ZXJuYWwiOmZhbHNlLCJ0ZXN0IjpmYWxzZSwiaWF0IjoxNzkzMDAwMDAwLCJleHAiOjE3OTMwMDE4MDB9.oGam0IsO2mTBQ8vHM_KYnPCXnQcjCWS7VIBLQCDluJU"
+}

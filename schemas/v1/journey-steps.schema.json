@@ -1,0 +1,39 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://sessions.my-beast.com/schemas/v1/journey-steps.schema.json",
+    "title": "A batch of server journey steps",
+    "description": "The body of POST /v1/steps (server secret; gzip with Content-Encoding: gzip, or plain JSON): what the host's server saw of its signed-in people - one step per page shown or write taken. Route names, statuses, timings and the NAMES of refused fields only: never a value, a message or a URL. Each step stands alone: a bad one is refused and named by its index, the rest are kept. A repeated id is a no-op (the SDK retries).",
+    "type": "object",
+    "required": ["steps"],
+    "additionalProperties": false,
+    "properties": {
+        "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+                "type": "object",
+                "required": ["id", "subject", "environment", "visit", "at", "kind"],
+                "additionalProperties": false,
+                "properties": {
+                    "id": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$", "description": "A UUID the SDK mints: the same step sent twice is kept once." },
+                    "subject": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$", "description": "The person, as the host's id (the client token's sub)." },
+                    "account": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,64}$" },
+                    "subject_since": { "type": ["integer", "null"], "minimum": 0, "description": "When the person's account was made, unix ms: a key flow with new_account_days starts only for people that new." },
+                    "environment": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+                    "visit": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$", "description": "The recording's id while the browser records (X-Recording-Id), else srv- and 16 hex of a hash of the session id. Detection does not trust it: a visit is one person's steps with no pause over 30 minutes." },
+                    "recording": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F-]{36}$" },
+                    "at": { "type": "integer", "minimum": 0, "description": "When the request came in, the server's clock, unix ms." },
+                    "kind": { "enum": ["visit", "save", "refused", "error", "blocked"], "description": "visit: a page shown; save: a write taken; refused: a write sent back (its errors, a 4xx); error: the server failed (5xx); blocked: not let in (401/403/404/405/419/429)." },
+                    "route": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,120}$", "description": "The route's NAME (`tenants.store`), never its URL: no slash, no space." },
+                    "method": { "type": ["string", "null"], "maxLength": 8 },
+                    "status": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+                    "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+                    "fields": { "type": ["array", "null"], "maxItems": 20, "items": { "type": "string", "maxLength": 80 }, "description": "A refused write's error KEYS (\"name\", \"tenants.0.email\")." },
+                    "page": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:/-]{1,120}$", "description": "The host's page name (an Inertia component, `Tenant::Leases/Show`), when it knows it: no space, so never a sentence." },
+                    "data_read": { "type": "boolean", "description": "A visit that read a sheet's or a list's data (JSON), not a page: a key flow may count it, the loop rule does not." }
+                }
+            }
+        }
+    }
+}

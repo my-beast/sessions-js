@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@mybeast/sessions demo</title>
+    <!-- Local check of the recorder against a running service: serve this repo's js/ folder
+         (php -S 127.0.0.1:8008 -t js) and open http://127.0.0.1:8008/examples/demo.html. demo-config.php, beside this
+         file, answers {url, key, env, token}: the service, a public key whose project lists this page's origin
+         (http://127.0.0.1:8008 - not the same origin as http://localhost:8008), and a client token minted for that
+         project with rec: true and a consent_at. It is asked again for a fresh token when the service answers 401.
+         No bundler: the import map points @rrweb/record at node_modules (npm install first). -->
+    <script type="importmap">
+        { "imports": { "@rrweb/record": "../node_modules/@rrweb/record/dist/record.js" } }
+    </script>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #f6f7f9;
+            --card: #ffffff;
+            --text: #1c2230;
+            --muted: #5b6475;
+            --line: #d9dde5;
+            --accent: #1c2230;
+            --accent-text: #ffffff;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #11141a;
+                --card: #1a1e27;
+                --text: #e7eaf0;
+                --muted: #9aa3b5;
+                --line: #2c3240;
+                --accent: #e7eaf0;
+                --accent-text: #11141a;
+            }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+        main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+        h1 { font-size: 22px; margin: 0; }
+        h2 { font-size: 16px; margin: 0 0 8px; }
+        section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+        .row { display: flex; flex-wrap: wrap; gap: 8px; }
+        button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+        button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+        label { display: grid; gap: 4px; color: var(--muted); }
+        input, textarea { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+        form { display: grid; gap: 12px; }
+        .status dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+        .status dt { color: var(--muted); }
+        .status dd { margin: 0; font-family: ui-monospace, monospace; font-size: 13px; overflow-wrap: anywhere; }
+        .muted { color: var(--muted); }
+        .person { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .badge { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+        .note { min-height: 1.5em; }
+        dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); padding: 20px; max-width: min(420px, calc(100vw - 32px)); }
+        dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+    </style>
+</head>
+<body>
+<main>
+    <h1 id="title">Sessions demo</h1>
+
+    <!-- The demo's own readout is blocked: the replay shows an empty box of the same size. -->
+    <section class="status" data-mybeast-block>
+        <h2>What is recorded</h2>
+        <dl>
+            <dt>Config</dt><dd id="config">-</dd>
+            <dt>Status</dt><dd id="status">-</dd>
+            <dt>Recording</dt><dd id="recording">-</dd>
+            <dt>Last upload</dt><dd id="upload">-</dd>
+        </dl>
+    </section>
+
+    <section>
+        <h2 id="page-title">First page</h2>
+        <p class="muted">Every word here that is not in the page's dictionary is masked in the recording, this one too.</p>
+        <div class="row">
+            <button id="save" class="primary">Save</button>
+            <button id="dialog-open">Open a dialog</button>
+            <button id="page">Change page</button>
+            <button id="boom">Throw an error</button>
+            <button id="mark">Add a mark</button>
+            <button id="flush">Send now</button>
+            <button id="toggle">Stop</button>
+        </div>
+        <p id="note" class="note muted"></p>
+    </section>
+
+    <section>
+        <h2>A form</h2>
+        <form id="form" novalidate>
+            <label>Name <input name="name" autocomplete="off" placeholder="Name"></label>
+            <label>Email <input name="email" type="email" autocomplete="off" placeholder="Email"></label>
+            <label>Notes <textarea name="notes" rows="3"></textarea></label>
+            <div class="row"><button type="submit" class="primary">Send</button></div>
+        </form>
+    </section>
+
+    <section data-mybeast-private>
+        <h2>Tenant</h2>
+        <div class="person">
+            <span>Liisa Virtanen · liisa.virtanen@example.fi</span>
+            <span class="badge">Late</span>
+        </div>
+        <p class="muted">Inside data-mybeast-private every word is masked, the dictionary's "Late" too.</p>
+    </section>
+</main>
+
+<dialog id="dialog" aria-labelledby="dialog-title">
+    <h2 id="dialog-title">Delete this note?</h2>
+    <div class="row">
+        <button id="dialog-cancel">Cancel</button>
+        <button id="dialog-delete" class="primary">Delete</button>
+    </div>
+</dialog>
+
+<script type="module">
+    import { init, createRecorder, refusedPayload } from '../src/index.js';
+
+    // The demo's dictionary: its own UI words, the only text a masked recording keeps readable.
+    const WORDS = [
+        'Sessions demo', 'What is recorded', 'Config', 'Status', 'Recording', 'Last upload', 'First page', 'Second page',
+        'Save', 'Saved', 'Open a dialog', 'Change page', 'Throw an error', 'Add a mark', 'Send now', 'Stop', 'Start',
+        'A form', 'Name', 'Email', 'Notes', 'Send', 'Fill in the email', 'Sent', 'Tenant', 'Late',
+        'Delete this note?', 'Cancel', 'Delete', 'Deleted', 'Mark added', 'Sent to the service',
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const show = (id, text) => {
+        $(id).textContent = text;
+    };
+
+    async function readConfig() {
+        try {
+            const response = await fetch('demo-config.php', { cache: 'no-store', headers: { Accept: 'application/json' } });
+            return response.ok ? await response.json() : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function render(state) {
+        show('status', state.status);
+        show('recording', state.recording ? `${state.recording.id} (since ${new Date(state.recording.startedAt).toLocaleTimeString()})` : '-');
+        const upload = state.upload;
+        show('upload', upload ? `${upload.status || 'no answer'} ${upload.answer} · doc ${upload.doc}, seq ${upload.seq} · ${upload.bytes} bytes gzipped` : '-');
+    }
+
+    let pageName = 'Demo/First';
+    const config = await readConfig();
+    const client = init(config);
+    show('config', client
+        ? `${client.url} · ${client.env} · ${client.masked ? 'masked' : 'unmasked'} · ${client.recording ? 'may record' : 'may not record: the token has no rec / consent_at'}`
+        : 'off: demo-config.php is missing, or did not answer {url, key, env, token}');
+
+    const recorder = createRecorder(client, {
+        dictionary: WORDS,
+        getToken: async () => (await readConfig())?.token ?? null,
+        currentPage: () => pageName,
+        onChange: render,
+    });
+    recorder.start();
+    render(recorder.state());
+
+    let running = true;
+    $('toggle').addEventListener('click', () => {
+        running = !running;
+        if (running) recorder.start();
+        else recorder.stop();
+        show('toggle', running ? 'Stop' : 'Start');
+    });
+    $('save').addEventListener('click', () => show('note', 'Saved'));
+    $('flush').addEventListener('click', () => {
+        recorder.flush();
+        show('note', 'Sent to the service');
+    });
+    $('mark').addEventListener('click', () => {
+        // A mark of the host's own: numbers stay, a string only when it is a dictionary word ("Save"), others masked.
+        recorder.mark('checkout', { step: 2, button: 'Save', coupon: 'LIISA-2026' });
+        show('note', 'Mark added');
+    });
+    $('boom').addEventListener('click', () => {
+        setTimeout(() => {
+            throw new TypeError("Cannot read properties of undefined (reading 'email') for liisa.virtanen@example.fi");
+        });
+    });
+    $('page').addEventListener('click', () => {
+        // A client-side page change, as a router makes it: the address, the content, and the recorder told.
+        const second = pageName === 'Demo/First';
+        pageName = second ? 'Demo/Second' : 'Demo/First';
+        history.pushState({}, '', second ? '?page=second&q=Liisa' : location.pathname);
+        show('page-title', second ? 'Second page' : 'First page');
+        recorder.pageChanged(pageName, `${location.pathname}${location.search}`);
+    });
+
+    const dialog = $('dialog');
+    $('dialog-open').addEventListener('click', () => dialog.showModal());
+    $('dialog-cancel').addEventListener('click', () => dialog.close());
+    $('dialog-delete').addEventListener('click', () => {
+        dialog.close();
+        show('note', 'Deleted');
+    });
+
+    $('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const email = event.target.elements.email.value.trim();
+        if (!email) {
+            // What a host that knows its forms tells the recorder: the refused fields and the first message's key.
+            recorder.mark('refused', refusedPayload({ email: 'rules.required' }));
+            show('note', 'Fill in the email');
+            return;
+        }
+        show('note', 'Sent');
+    });
+</script>
+</body>
+</html>
