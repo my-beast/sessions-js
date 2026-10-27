@@ -1,7 +1,7 @@
 {
     "name": "@mybeast/sessions",
     "version": "0.1.0",
-    "description": "Browser SDK for sessions.my-beast.com: session recordings of your pages, with the person's yes.",
+    "description": "Browser SDK for MyBeast Sessions (services.my-beast.com/sessions): session recordings of your pages, with the person's yes.",
     "private": true,
     "type": "module",
     "exports": {

@@ -1,8 +1,8 @@
 # @mybeast/sessions
 
-The browser SDK of **sessions.my-beast.com**: an rrweb recording of your pages, masked before it leaves the browser,
-sent in gzip chunks with the person's yes. Plain ES modules, no build step, no framework. Node ≥ 20 for the tests.
-Errors are a separate product: `@mybeast/errors`.
+The browser SDK of **Sessions** (services.my-beast.com/sessions): an rrweb recording of your pages, masked before it
+leaves the browser, sent in gzip chunks with the person's yes. Plain ES modules, no build step, no framework. Node ≥ 20
+for the tests. Errors are a separate product: `@mybeast/errors`.
 
 ## Install
 
@@ -127,13 +127,13 @@ php -S 127.0.0.1:8008 -t js      # or the launch entry mybeast-sessions-js-demo
 ```
 
 Open `http://localhost:8008/examples/demo.html` (localhost: an origin is matched exactly). It reads
-`examples/demo-config.php` (`{url, key, env, token}`, minted from the sessions service beside this repo: its
-"asuvaan" project lists `http://localhost:8008` as an origin, and a client token with `rec: true` and a
+`examples/demo-config.php` (`{url, key, env, token}`, minted from services/ two folders up, where Sessions is a
+module: its "asuvaan" project lists `http://localhost:8008` as an origin, and a client token with `rec: true` and a
 `consent_at`), records the page, and shows the recording id and the last upload's answer. Type in the form, open the
 dialog, change the page, throw an error: the private card and everything outside the demo's dictionary arrive starred.
 
 ## Tests
 
 ```bash
-npm install && npm test   # node --test; schemas/ must equal the service's (when it sits beside this)
+npm install && npm test   # node --test; schemas/ must equal services/schemas/sessions (when services/ is there)
 ```

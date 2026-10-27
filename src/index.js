@@ -1,4 +1,4 @@
-// @mybeast/sessions - session recordings of a page, sent to sessions.my-beast.com.
+// @mybeast/sessions - session recordings of a page, sent to Sessions (services.my-beast.com/sessions).
 export { init, mayRecord } from './client.js';
 export { readClaims, secondsLeft } from './token.js';
 export { createRecorder } from './recorder.js';

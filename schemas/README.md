@@ -1,12 +1,12 @@
 # Payload contract
 
-Every payload a host and this service exchange has a JSON Schema here, by version (`v1/`). The service is the
-source; each SDK (mybeast/sessions-laravel, @mybeast/sessions) keeps a copy under its own `schemas/` and a test
-fails when the copy differs from this one (when the service sits beside it). Change a schema only together with the
-service and both SDKs.
+Every payload a host and the Sessions module of services exchange has a JSON Schema here, by version (`v1/`). The
+module (`services/schemas/sessions`) is the source; each SDK (mybeast/sessions-laravel, @mybeast/sessions) keeps a
+copy under its own `schemas/` and a test fails when the copy differs from this one (when services/ is there). Change
+a schema only together with the module and both SDKs. Paths are below `MYBEAST_SESSIONS_URL` (`…/sessions`).
 
-The client token is the same contract as errors.my-beast.com's - one token format across MyBeast products, each
-product verifying it with its own project's signing keys.
+The client token is the same contract as Errors' (`services/schemas/errors`) - one token format across MyBeast
+products, each module verifying it with its own project's signing keys.
 
 | File | What |
 |---|---|

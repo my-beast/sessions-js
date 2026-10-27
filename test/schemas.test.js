@@ -21,9 +21,9 @@ test('a recording token without its yes does not fit', () => {
     assert.equal(validator('client-token.schema.json')(claims), false);
 });
 
-test("the SDK's schemas are the service's, file for file", (t) => {
-    const source = join(root, '..', 'service', 'schemas');
-    if (!existsSync(source)) return t.skip('The service is not beside this SDK.');
+test("the SDK's schemas are the Sessions module's in services/, file for file", (t) => {
+    const source = join(root, '..', '..', 'services', 'schemas', 'sessions');
+    if (!existsSync(source)) return t.skip('services/ is not two folders up from this SDK.');
 
     const files = (dir) => {
         const out = {};
