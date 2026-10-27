@@ -37,6 +37,7 @@ products, each module verifying it with its own project's signing keys.
 | 204 | Stored (or stored before) | goes on |
 | 401 | No token, or it does not hold (ran out, wrong key) | asks the host for a fresh one (`getToken`), sends again; none: stops |
 | 403 | Not this origin or key; the token does not allow recording; unmasked where the project requires masking (`{"refused":"not-recording"\|"mask-required"}`) | stops recording on this page |
+| 403 `{"refused":"monthly-limit"}` | A new recording past the project's recordings this month (its package's, until the 1st UTC); a recording already open goes on | stops recording on this page |
 | 403 `{"refused":"before-consent"}` | This chunk starts more than 5 s before `consent_at` (a tab's leftovers, or a browser clock behind the host's) | drops this chunk only; waits for its clock to pass `consent_at` before recording |
 | 404 | The recording id is another subject's | starts a new recording |
 | 409 | The recording was made for another account, masked the other way, or under a token with another `test` mark (`{"refused":"account"\|"masking"\|"test"}`) | starts a new recording |
@@ -69,7 +70,7 @@ All with the server secret (`Authorization: Bearer sk_….…`).
 
 | Call | What | Answer |
 |---|---|---|
-| `POST /v1/steps` | A batch of up to 500 steps (`journey-steps`), gzip (`Content-Encoding: gzip`) or plain JSON, at most 2 MiB as sent | 202 `{"accepted": n, "dropped": n, "refused": [{"index": i, "reason": "…"}]}` - dropped: a person who objected; refused steps will never be taken (the SDK drops them). 413 too big (the SDK halves the batch); 422 not a batch (dropped: sending it again is refused again); 401 wrong secret, 429 too many, 5xx or no answer: kept and sent later |
+| `POST /v1/steps` | A batch of up to 500 steps (`journey-steps`), gzip (`Content-Encoding: gzip`) or plain JSON, at most 2 MiB as sent | 202 `{"accepted": n, "dropped": n, "refused": [{"index": i, "reason": "…"}]}` - dropped: a person who objected; refused steps will never be taken (the SDK drops them; past the project's steps this month, its package's, they are refused as `monthly-limit` until the 1st UTC, and the SDK says so once a month). 413 too big (the SDK halves the batch); 422 not a batch (dropped: sending it again is refused again); 401 wrong secret, 429 too many, 5xx or no answer: kept and sent later |
 | `PUT /api/v1/flows` | Every key flow (`key-flows`), replacing the project's - all or nothing | 200 `{"flows": n}`; 422 `{"message": "flows.<i>: <what>"}` and nothing changed; 401 wrong secret |
 | `PUT /api/v1/subjects/{subject}/objection` | The person objects to the journey: theirs is erased, and none is kept from now on (server steps dropped, a recording's presses and dialogs not added) | 200 `{"erased": n}` |
 | `DELETE /api/v1/subjects/{subject}/objection` | The objection is lifted | 204 |
