@@ -23,6 +23,7 @@
                     "environment": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
                     "visit": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$", "description": "The recording's id while the browser records (X-Recording-Id), else srv- and 16 hex of a hash of the session id. Detection does not trust it: a visit is one person's steps with no pause over 30 minutes." },
                     "recording": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F-]{36}$" },
+                    "request": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,64}$", "description": "The request's id as the host's log lines carry it (the answer's X-Request-Id: mybeast/logs-laravel sets it), so its step opens exactly its lines in Logs. Leave it out when there is none: a service from before 28.10.2026 refuses the field." },
                     "at": { "type": "integer", "minimum": 0, "description": "When the request came in, the server's clock, unix ms." },
                     "kind": { "enum": ["visit", "save", "refused", "error", "blocked"], "description": "visit: a page shown; save: a write taken; refused: a write sent back (its errors, a 4xx); error: the server failed (5xx); blocked: not let in (401/403/404/405/419/429)." },
                     "route": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,120}$", "description": "The route's NAME (`tenants.store`), never its URL: no slash, no space." },

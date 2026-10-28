@@ -78,3 +78,7 @@ All with the server secret (`Authorization: Bearer sk_….…`).
 
 A recording's presses and dialogs join its person's journey from the chunk ingest (the `press` and `dialog` marks, on
 the browser's clock); a server step and a recording meet in one visit by person and time, not by the visit key.
+
+A step may name its request (`request`: the id the host's log lines carry - its answer's `X-Request-Id`, which
+mybeast/logs-laravel sets): the replay then opens exactly that request's lines in Logs. Send it only when there is one -
+a service from before 28.10.2026 refuses the field, and refuses a step with any field it does not know.
