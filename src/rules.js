@@ -366,14 +366,15 @@ export function uploadInit(body, keepalive = false) {
 /**
  * What an upload's answer means (the contract's table):
  * stored (2xx: a repeated doc/seq too, the first write wins) · refresh (401: the token does not hold - ask the host
- * for a fresh one, send again) · stop (403: not this origin, key or yes; but a chunk from before the yes, `refused:
- * before-consent`, is only dropped - the next one may well be after it) · rotate (404 the id is another subject's;
+ * for a fresh one, send again) · stop (402: the project's subscription has ended; 403: not this origin, key or yes;
+ * but a chunk from before the yes, `refused: before-consent`, is only dropped - the next one may well be after it) · rotate (404 the id is another subject's;
  * 409 another account's: a new recording) · split (413) · retry (no answer, 408, 425, 429, 5xx: 3 tries) · drop
  * (422 not storable or a leak; any other answer the contract does not name).
  */
 export function answerFor(status, refused = null) {
     if (status >= 200 && status < 300) return 'stored';
     if (status === 401) return 'refresh';
+    if (status === 402) return 'stop';
     if (status === 403) return refused === 'before-consent' ? 'drop' : 'stop';
     if (status === 404 || status === 409) return 'rotate';
     if (status === 413) return 'split';

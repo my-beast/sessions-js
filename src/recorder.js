@@ -62,6 +62,19 @@ import { secondsLeft } from './token.js';
 const FLUSH_MS = 5000;
 const KEEPALIVE_MAX_BYTES = 60_000;
 const MAX_TRIES = 3;
+
+/**
+ * Chunks of this recording lost in a row with no answer at all (each after its tries): the service cannot be reached
+ * from this page - an origin it does not list (its refusal carries no CORS header, so the page sees no status), a
+ * blocker, a dead network. Recording stops here rather than sending every few seconds for nothing.
+ */
+const MAX_UNANSWERED = 3;
+
+/** The headers the page's own requests carry while it records: the host's server ties its journey step (and errors) to the moment. */
+const RECORDING_HEADERS = Object.freeze({ id: 'X-Recording-Id', at: 'X-Recording-At' });
+
+/** Where the page's fetch and XMLHttpRequest look for the headers to add (installed once per window). */
+const TAGGER = Symbol.for('@mybeast/sessions.requestHeaders');
 const REFRESH_BEFORE_S = 120; // a token this close to running out is renewed before the service refuses it
 const REFRESH_EVERY_MS = 60_000; // at most one early renewal a minute (a browser clock far ahead would ask nonstop)
 const TOKEN_WAIT_MS = 15_000; // a getToken that never answers counts as none
@@ -98,8 +111,102 @@ function inert() {
         pageChanged() {},
         flush() {},
         currentRecording: () => null,
+        requestHeaders: () => ({}),
         state: () => ({ ...OFF_STATE }),
     };
+}
+
+/**
+ * The page's own requests carry the recording's headers while it records - the host's server reads them:
+ * sessions-laravel files the journey step under the recording, errors-laravel links an error to its moment. Only to
+ * the page's own origin (a header to another would cost it a preflight) and never to Sessions itself. Installed once
+ * per window, on fetch and XMLHttpRequest; a later recorder takes over the source. A header the page set itself is
+ * left as it is, and any trouble sends the request as it was.
+ *
+ * @param {Window} win
+ * @param {() => Record<string, string>} source the headers of the moment ({} when not recording)
+ * @param {string} serviceUrl
+ */
+function tagRequests(win, source, serviceUrl) {
+    let origin = null;
+    let service = null;
+    try {
+        origin = win.location.origin;
+        service = new URL(serviceUrl, win.location.href).href;
+    } catch {
+        return;
+    }
+    if (!origin || origin === 'null') return;
+
+    const installed = win[TAGGER] !== undefined;
+    win[TAGGER] = source;
+    if (installed) return;
+
+    const headersFor = (url) => {
+        try {
+            const target = new URL(String(url), win.location.href);
+            if (target.origin !== origin || target.href.startsWith(service)) return null;
+            const headers = win[TAGGER]?.();
+            return headers && headers[RECORDING_HEADERS.id] ? headers : null;
+        } catch {
+            return null;
+        }
+    };
+
+    if (typeof win.fetch === 'function') {
+        const fetch = win.fetch;
+        win.fetch = function (input, init) {
+            try {
+                const request = typeof win.Request === 'function' && input instanceof win.Request;
+                const add = headersFor(request ? input.url : input);
+                if (add) {
+                    const headers = new win.Headers(init?.headers ?? (request ? input.headers : undefined));
+                    for (const [name, value] of Object.entries(add)) {
+                        if (!headers.has(name)) headers.set(name, value);
+                    }
+                    init = { ...init, headers };
+                }
+            } catch {
+                // sent as it was
+            }
+            return fetch.call(this, input, init);
+        };
+    }
+
+    const proto = win.XMLHttpRequest?.prototype;
+    if (proto && typeof proto.open === 'function' && typeof proto.send === 'function' && typeof proto.setRequestHeader === 'function') {
+        const { open, send, setRequestHeader } = proto;
+        const address = Symbol('address');
+        const named = Symbol('named');
+        proto.open = function (method, url, ...rest) {
+            try {
+                this[address] = url;
+                this[named] = new Set();
+            } catch {
+                // sent as it was
+            }
+            return open.call(this, method, url, ...rest);
+        };
+        proto.setRequestHeader = function (name, value) {
+            try {
+                this[named]?.add(String(name).toLowerCase());
+            } catch {
+                // set as it was
+            }
+            return setRequestHeader.call(this, name, value);
+        };
+        proto.send = function (body) {
+            try {
+                const add = headersFor(this[address]);
+                for (const [name, value] of Object.entries(add ?? {})) {
+                    if (!this[named]?.has(name.toLowerCase())) setRequestHeader.call(this, name, value);
+                }
+            } catch {
+                // sent as it was
+            }
+            return send.call(this, body);
+        };
+    }
 }
 
 function tabStore(win) {
@@ -122,9 +229,10 @@ function tabStore(win) {
  *   dictionary?: string[]|object|(() => string[]|object), readable?: (text: string) => boolean,
  *   privateSelectors?: string[]|string, blockSelectors?: string[]|string, keepAttributes?: string[],
  *   idPatterns?: RegExp[], routeWords?: string[]|((segment: string) => boolean),
- *   currentPage?: () => (string|null), onChange?: (state: object) => void,
+ *   currentPage?: () => (string|null), onChange?: (state: object) => void, tagRequests?: boolean,
  *   window?: Window, fetch?: typeof fetch, record?: Function,
- * }} options `window`, `fetch` and `record` (rrweb's) are for tests.
+ * }} options `tagRequests: false` leaves the page's own requests without the recording's headers (requestHeaders()
+ * gives them to add by hand). `window`, `fetch` and `record` (rrweb's) are for tests.
  */
 export function createRecorder(client, options = {}) {
     try {
@@ -179,6 +287,7 @@ function build(client, options) {
         renewNext: false, // the next start begins a new recording
         refused: '', // 'token': no token that holds (a later setToken lifts it); 'service' (or 'rrweb'): nothing more from this page load
         refusals: 0, // 404/409 answers in a row (a second one stops: something is wrong, not a stale id)
+        unanswered: 0, // this recording's chunks lost in a row with no answer at all (MAX_UNANSWERED stops)
         bigDrops: 0, // events too big to store (the first asks for a new snapshot, the second stops)
         startFailures: 0,
         docStarted: false,
@@ -202,6 +311,19 @@ function build(client, options) {
     const running = () => s.stopRrweb !== null;
     const wanted = () => s.started && s.auth.recording && !s.refused;
     const currentRecording = () => (running() && s.id ? { id: s.id, startedAt: s.start } : null);
+    /** While recording, the headers that tie a request of this page to its moment; {} otherwise. */
+    const requestHeaders = () => {
+        const now = currentRecording();
+
+        return now ? { [RECORDING_HEADERS.id]: now.id, [RECORDING_HEADERS.at]: String(Math.max(0, Date.now() - now.startedAt)) } : {};
+    };
+    if (options.tagRequests !== false) {
+        try {
+            tagRequests(win, requestHeaders, client.url);
+        } catch {
+            // the page's requests go as they were; the recording does not depend on it
+        }
+    }
 
     function status() {
         if (s.refused) return 'refused';
@@ -628,10 +750,12 @@ function build(client, options) {
         switch (answer) {
             case 'stored':
                 s.refusals = 0;
+                s.unanswered = 0;
                 return;
             case 'retry':
                 chunk.tries += 1;
                 if (chunk.tries < MAX_TRIES) s.later.push(chunk);
+                else if (!s.upload?.status && chunk.id === s.id && ++s.unanswered >= MAX_UNANSWERED) refuse('unreachable');
                 return;
             case 'stop':
                 // A chunk of an earlier recording (a tail) can be refused for itself - from before the yes - and is
@@ -927,6 +1051,17 @@ function build(client, options) {
                 return currentRecording();
             } catch {
                 return null;
+            }
+        },
+        /**
+         * {'X-Recording-Id', 'X-Recording-At'} while recording, else {}: the page's own fetch and XMLHttpRequest get
+         * them already (tagRequests); add them by hand to anything else that reaches the host's server.
+         */
+        requestHeaders: () => {
+            try {
+                return requestHeaders();
+            } catch {
+                return {};
             }
         },
         /** {status: off|waiting|recording|paused|refused, recording, upload}: what onChange hears. */

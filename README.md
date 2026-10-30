@@ -47,6 +47,7 @@ recorder.pageChanged('Invoice/Show', location.pathname + location.search);
 | `mark(tag, payload)` | A mark of your own: an rrweb custom event, tag at most 32 characters. Masked recordings put its strings through the dictionary, keep numbers and yes/no, cut it at 3 levels and 4000 characters. Your object is copied, never changed. |
 | `flush()` | Sends what is buffered now. |
 | `currentRecording()` | `{id, startedAt}` while recording, else `null`. Pass it to `@mybeast/errors` as `currentRecording` to link an error to its moment. |
+| `requestHeaders()` | `{'X-Recording-Id', 'X-Recording-At'}` while recording, else `{}`. Your page's own `fetch` and `XMLHttpRequest` calls get them already (`tagRequests`); add them by hand to anything else that reaches your server. |
 | `state()` | `{status: 'off' \| 'waiting' \| 'recording' \| 'paused' \| 'refused', recording, upload: {status, answer, doc, seq, bytes} \| null}`. |
 
 **Options** (all optional)
@@ -64,6 +65,7 @@ recorder.pageChanged('Invoice/Show', location.pathname + location.search);
 | `routeWords` | any lowercase word | The path segments that stay, as a list or a predicate. Set it when your URLs carry name slugs (`/u/liisa-virtanen`): by default those stay. |
 | `currentPage()` | none | Your page name for the `page` mark at each document start. |
 | `onChange(state)` | none | Hears every change of `state()`. |
+| `tagRequests` | `true` | While recording, your page's own requests (`fetch`, `XMLHttpRequest`) to its own origin carry `X-Recording-Id` and `X-Recording-At` (ms into the recording): `mybeast/sessions-laravel` files each journey step under the recording, `mybeast/errors-laravel` opens an error's replay at its second. Never to another origin (no preflight is asked of it) or to Sessions; a header your page set itself is kept. `false` leaves your requests alone - `requestHeaders()` gives them to add yourself. |
 
 ## Masking
 
@@ -108,12 +110,14 @@ the token's `consent_at` (the service refuses events from more than 5 s before t
 |---|---|
 | 204 | goes on |
 | 401 | sends again with a fresher token (`setToken`'s, or `getToken`'s); none: stops until `setToken` |
+| 402 | stops recording on this page: the project's subscription has ended |
 | 403 | stops recording on this page (a refused leftover of an earlier recording is only dropped) |
 | 403 `before-consent` | drops that chunk only: it began before the yes (a leftover, or this browser's clock behind the host's) |
 | 404 / 409 | starts a new recording; a second refusal in a row stops |
 | 413 | splits the chunk and sends the halves; one event too big is dropped and a new snapshot taken |
 | 422 | drops the chunk |
 | 429, 5xx, none | tries again on the next beat, 3 tries |
+| none, 3 chunks in a row | stops recording on this page: Sessions cannot be reached from it (an origin it does not list gets no CORS header, so the page sees no answer; a blocker; no network) |
 
 `answerFor(status, refused)` is exported. A keepalive sent while the tab is only hidden that gets no answer goes back
 in the queue; one sent as the page leaves cannot be sent again. Nothing here throws into your page: every listener is wrapped, every promise

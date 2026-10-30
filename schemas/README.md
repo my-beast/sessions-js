@@ -30,7 +30,7 @@ products, each module verifying it with its own project's signing keys.
   the page goes away (keep a keepalive body under 60 000 bytes - the browser's 64 KiB budget is shared).
 - The token must say `rec: true` with a `consent_at`; a chunk whose first event is more than 5 s before
   `consent_at` is refused. With `mask: true` the service scans the unpacked chunk for e-mail addresses, Finnish
-  personal ids, IBANs and phone numbers before anything is stored.
+  personal ids, IBANs, phone numbers in international form and card numbers before anything is stored.
 
 | Answer | Means | The SDK |
 |---|---|---|
@@ -38,16 +38,18 @@ products, each module verifying it with its own project's signing keys.
 | 401 | No token, or it does not hold (ran out, wrong key) | asks the host for a fresh one (`getToken`), sends again; none: stops |
 | 403 | Not this origin or key; the token does not allow recording; unmasked where the project requires masking (`{"refused":"not-recording"\|"mask-required"}`) | stops recording on this page |
 | 403 `{"refused":"monthly-limit"}` | A new recording past the project's recordings this month (its package's, until the 1st UTC); a recording already open goes on | stops recording on this page |
+| 402 | The project's subscription has ended | stops recording on this page |
+| 403 `{"refused":"erased"}` | The recording was deleted or its person's or account's recordings erased while this tab still recorded (for a day after) | stops recording on this page |
 | 403 `{"refused":"before-consent"}` | This chunk starts more than 5 s before `consent_at` (a tab's leftovers, or a browser clock behind the host's) | drops this chunk only; waits for its clock to pass `consent_at` before recording |
 | 404 | The recording id is another subject's | starts a new recording |
 | 409 | The recording was made for another account, masked the other way, or under a token with another `test` mark (`{"refused":"account"\|"masking"\|"test"}`) | starts a new recording |
 | 413 | Too big | splits the chunk and sends the halves |
 | 422 | Not a gzip of a JSON array of events, or a leak in a masked chunk (`{"refused":"leak","kinds":[…]}`) | drops the chunk |
-| 429, 5xx, none | Busy or down | tries again later (3 tries) |
+| 429, 5xx, none | Busy or down | tries again later (3 tries); a third chunk in a row with no answer at all stops recording on this page |
 
 - Every answer the service gives a listed origin carries `Access-Control-Allow-Origin`, refusals too, so the SDK can
-  read them. An origin or key the project does not list gets a bare 403 the page cannot read (the SDK retries, then
-  gives up).
+  read them. An origin or key the project does not list gets a bare 403 the page cannot read (the SDK retries, and
+  after three chunks with no answer stops).
 - The service orders a recording's events by their timestamps, not by `seq`: a split chunk's halves are numbered after
   chunks already queued. The `Referer` is not read (the SDK sends the origin only).
 

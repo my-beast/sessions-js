@@ -409,6 +409,7 @@ test("every row of the contract's answer table", () => {
     assert.equal(answerFor(200), 'stored');
     assert.equal(answerFor(401), 'refresh', 'ask the host for a fresh token, send again');
     assert.equal(answerFor(403), 'stop', 'not this origin, key or yes');
+    assert.equal(answerFor(402), 'stop', "the project's subscription has ended: nothing more from this page");
     assert.equal(answerFor(403, 'before-consent'), 'drop', 'a chunk from before the yes: only that chunk goes');
     assert.equal(answerFor(403, 'mask-required'), 'stop');
     assert.equal(answerFor(404), 'rotate', "the id is another subject's");

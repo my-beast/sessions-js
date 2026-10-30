@@ -246,6 +246,101 @@ test('429, 5xx and no answer: three tries, then the chunk is let go', async () =
     assert.equal(recorder.state().status, 'recording');
 });
 
+test('a 402 (the subscription ended) stops recording on this page', async () => {
+    const { net, recorder, win } = started(setup({ answers: [402] }));
+    recorder.flush();
+    await settle();
+    assert.equal(recorder.state().status, 'refused');
+    recorder.mark('later', {});
+    win.tick();
+    await settle();
+    assert.equal(net.calls.length, 1, 'nothing more is sent');
+});
+
+test('three chunks in a row lost with no answer at all: recording stops here instead of sending for nothing', async () => {
+    const lost = () => new TypeError('Failed to fetch');
+    const { net, recorder, win, rr } = started(setup({ answers: Array.from({ length: 12 }, lost) }));
+    for (let chunk = 0; chunk < 3; chunk++) {
+        rr.emit({ type: 3, data: { source: 2, type: 2, id: 4 }, timestamp: Date.now() });
+        recorder.flush();
+        await settle();
+        for (let retry = 0; retry < 3; retry++) {
+            win.tick();
+            await settle();
+        }
+    }
+    assert.equal(recorder.state().status, 'refused');
+    const sent = net.calls.length;
+    rr.emit({ type: 3, data: { source: 2, type: 2, id: 4 }, timestamp: Date.now() });
+    win.tick();
+    await settle();
+    assert.equal(net.calls.length, sent, 'nothing more is tried');
+});
+
+test("the page's own requests carry the recording's headers while it records - its origin only, never Sessions'", async () => {
+    const seen = [];
+    const ctx = setup();
+    const { win } = ctx;
+    win.location.origin = 'https://app.example.com';
+    win.Headers = Headers;
+    win.Request = Request;
+    // The page's fetch as the recorder found it (installed before the recorder: it wraps it).
+    const pageFetch = async (input, init) => {
+        seen.push({ url: String(input instanceof Request ? input.url : input), headers: new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)) });
+        return { status: 200 };
+    };
+    class Xhr {
+        open(method, url) { this.url = url; this.headers = {}; }
+        setRequestHeader(name, value) { this.headers[name] = this.headers[name] ? `${this.headers[name]}, ${value}` : value; }
+        send() { seen.push({ url: this.url, xhr: this.headers }); }
+    }
+    win.fetch = pageFetch;
+    win.XMLHttpRequest = Xhr;
+    const recorder = createRecorder(ctx.client, { window: win, fetch: ctx.net.fetch, record: ctx.rr.record, dictionary: ['Save'] });
+
+    await win.fetch('/api/leases', { headers: { Accept: 'application/json' } });
+    assert.equal(seen[0].headers.get('X-Recording-Id'), null, 'not recording yet: nothing added');
+
+    recorder.start();
+    win.runTimers();
+    const id = recorder.currentRecording().id;
+    assert.deepEqual(Object.keys(recorder.requestHeaders()), ['X-Recording-Id', 'X-Recording-At']);
+
+    await win.fetch('/api/leases', { headers: { Accept: 'application/json' } });
+    await win.fetch(new Request('https://app.example.com/tenants', { method: 'POST' }));
+    await win.fetch('https://cdn.example.net/x.js');
+    await win.fetch('https://sessions.example.com/v1/parts/x');
+    assert.equal(seen[1].headers.get('X-Recording-Id'), id);
+    assert.match(seen[1].headers.get('X-Recording-At'), /^\d+$/);
+    assert.equal(seen[1].headers.get('Accept'), 'application/json', "the page's own headers kept");
+    assert.equal(seen[2].headers.get('X-Recording-Id'), id, 'a Request too');
+    assert.equal(seen[3].headers.get('X-Recording-Id'), null, 'another origin: no preflight asked of it');
+    assert.equal(seen[4].headers.get('X-Recording-Id'), null, 'never to Sessions');
+
+    const xhr = new win.XMLHttpRequest();
+    xhr.open('POST', '/tenants');
+    xhr.setRequestHeader('X-Recording-Id', 'set-by-the-page');
+    xhr.send();
+    assert.equal(seen[5].xhr['X-Recording-Id'], 'set-by-the-page', 'a header the page set is left as it is');
+    assert.match(seen[5].xhr['X-Recording-At'], /^\d+$/);
+
+    recorder.stop();
+    await win.fetch('/api/leases');
+    assert.equal(seen[6].headers.get('X-Recording-Id'), null, 'stopped: nothing added');
+});
+
+test('tagRequests: false leaves the page\'s requests alone; requestHeaders() still says them', async () => {
+    const ctx = setup({ tagRequests: false });
+    ctx.win.location.origin = 'https://app.example.com';
+    const pageFetch = async () => ({ status: 200 });
+    ctx.win.fetch = pageFetch;
+    const recorder = createRecorder(ctx.client, { window: ctx.win, fetch: ctx.net.fetch, record: ctx.rr.record, tagRequests: false });
+    recorder.start();
+    ctx.win.runTimers();
+    assert.equal(ctx.win.fetch, pageFetch);
+    assert.equal(recorder.requestHeaders()['X-Recording-Id'], recorder.currentRecording().id);
+});
+
 test('another person or account in a new token: a new recording; what came before goes under the old token', async () => {
     const { net, recorder, client } = started(setup());
     const first = recorder.currentRecording().id;
