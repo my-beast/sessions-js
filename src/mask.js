@@ -1,4 +1,4 @@
-// The masking engine (ported from Asuvaan's lib/insights/mask.js): what a masked recording keeps readable. Fail
+// The masking engine: what a masked recording keeps readable. Fail
 // closed: text, an attribute or a mark the rules do not know is hidden, and an event the sanitizer cannot read never
 // leaves the page.
 //
@@ -13,8 +13,8 @@
 // No browser objects at load, so `node --test` can load it.
 
 /**
- * Rule 3: inside these every word is masked. `[data-insights-private]` is the name Asuvaan's markup used before the
- * SDK; it stays an alias so that markup keeps working.
+ * Rule 3: inside these every word is masked. `[data-insights-private]` is an older name, kept
+ * as an alias so markup that uses it keeps working.
  */
 export const PRIVATE_SELECTORS = Object.freeze(['[data-mybeast-private]', '[translate="no"]', '[data-insights-private]']);
 export const PRIVATE_SELECTOR = PRIVATE_SELECTORS.join(', ');

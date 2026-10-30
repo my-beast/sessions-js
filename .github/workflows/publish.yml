@@ -1,0 +1,29 @@
+# A tag v<version> publishes that version to npm, with provenance, through npm's trusted publishing: no token is
+# stored here. The first version is published by hand (README, "Releasing"); then the package's settings on npmjs.com
+# name this repository and this workflow as its trusted publisher.
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: The tag is the package's version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:types
+      - run: npm install --global npm@latest
+      - run: npm publish --access public

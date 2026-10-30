@@ -1,4 +1,4 @@
-// The recorder's pure parts (ported from Asuvaan's lib/insights/rules.js): which recording a tab writes to, the tail
+// The recorder's pure parts: which recording a tab writes to, the tail
 // a page leaves for the next one, the marks' payloads, the chunks, the upload address and what an answer means
 // (schemas/README.md, "Uploading a chunk" - the contract). recorder.js does the rest.
 //

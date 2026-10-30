@@ -1,4 +1,4 @@
-// The session recorder (ported from Asuvaan's lib/insights/recorder.js): rrweb in this tab while the host and the
+// The session recorder: rrweb in this tab while the host and the
 // token allow it, uploaded in gzip chunks to Sessions (schemas/README.md, "Uploading a chunk"). Pure
 // parts (ids, tail, payloads, answers): ./rules.js. Masking: ./mask.js. This is the only file that imports rrweb, so
 // a host can load it lazily and keep rrweb out of its main bundle.

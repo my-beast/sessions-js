@@ -2,23 +2,56 @@
     "name": "@mybeast/sessions",
     "version": "0.1.0",
     "description": "Browser SDK for MyBeast Sessions (services.my-beast.com/sessions): session recordings of your pages, with the person's yes.",
-    "private": true,
+    "license": "MIT",
+    "keywords": [
+        "mybeast",
+        "session-replay",
+        "session-recording",
+        "rrweb",
+        "browser"
+    ],
+    "homepage": "https://github.com/my-beast/sessions-js#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/my-beast/sessions-js.git"
+    },
+    "bugs": {
+        "url": "https://github.com/my-beast/sessions-js/issues"
+    },
+    "author": "MyBeast (https://my-beast.com)",
     "type": "module",
     "exports": {
-        ".": "./src/index.js",
-        "./mask": "./src/mask.js"
+        ".": {
+            "types": "./types/index.d.ts",
+            "default": "./src/index.js"
+        },
+        "./mask": {
+            "types": "./types/mask.d.ts",
+            "default": "./src/mask.js"
+        },
+        "./package.json": "./package.json"
     },
-    "files": ["src", "schemas"],
+    "types": "./types/index.d.ts",
+    "files": [
+        "src",
+        "schemas",
+        "types"
+    ],
     "scripts": {
-        "test": "node --test"
+        "test": "node --test",
+        "test:types": "tsc -p test-d"
     },
     "dependencies": {
         "@rrweb/record": "2.1.7"
     },
     "devDependencies": {
-        "ajv": "8.17.1"
+        "ajv": "8.17.1",
+        "typescript": "7.0.2"
     },
     "engines": {
         "node": ">=20"
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

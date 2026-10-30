@@ -1,4 +1,4 @@
-// Masked recordings (src/mask.js; ported from Asuvaan's insightsMasking tests): only the host's own words stay
+// Masked recordings (src/mask.js): only the host's own words stay
 // readable, every value, name, address and id is hidden before an event leaves the browser. The canary fills rrweb's
 // events with a made-up person's details and asserts none of them survives.
 import { test } from 'node:test';
@@ -306,7 +306,7 @@ test('a sanitizer that cannot read an event lets nothing out', () => {
     assert.equal(clean({ type: 5, data: { payload: {} }, timestamp: 1 }), null, 'a mark without a tag');
 });
 
-/* ── What Asuvaan's independent review found (23.10.2026) ────────────── */
+/* ── What an independent review found (23.10.2026) ──────────────────── */
 
 test("an iframe's document never leaves: its attach, its changes, its inputs", () => {
     const clean = createSanitizer(ui);

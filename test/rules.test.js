@@ -1,4 +1,4 @@
-// The recorder's pure parts (src/rules.js; ported from Asuvaan's insightsRecording tests): which recording a tab
+// The recorder's pure parts (src/rules.js): which recording a tab
 // writes to, the tail a page leaves for the next one, the marks' payloads, chunks, the upload address and what an
 // answer means (schemas/README.md, "Uploading a chunk").
 import { test } from 'node:test';

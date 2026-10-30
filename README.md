@@ -10,6 +10,8 @@ for the tests. Errors are a separate product: `@mybeast/errors`.
 npm install @mybeast/sessions   # brings @rrweb/record 2.1.7, pinned
 ```
 
+Its types are in the package (`types/`), for `@mybeast/sessions/mask` too.
+
 `src/recorder.js` is the only file that imports rrweb (about 160 KB). A host that keeps its main bundle small can
 `import('@mybeast/sessions')` when the browser is idle. The masking helpers alone (no rrweb) are
 `@mybeast/sessions/mask` - for masking the host's own telemetry the same way (an error report's pressed labels, say).
@@ -139,5 +141,12 @@ dialog, change the page, throw an error: the private card and everything outside
 ## Tests
 
 ```bash
-npm install && npm test   # node --test; schemas/ must equal services/schemas/sessions (when services/ is there)
+npm install && npm test && npm run test:types   # node --test, then tsc on test-d/; schemas/ must equal services/schemas/sessions (when services/ is there)
 ```
+
+## Releasing
+
+Set `version` in `package.json`, add it to `CHANGELOG.md`, then tag it: `git tag v0.2.0 && git push --tags`. The
+Publish workflow checks that the tag is the version, runs the tests and publishes to npm through npm's trusted
+publishing (no token stored anywhere). The first version goes by hand: `npm publish --access public`, with the npm
+organisation's two-factor code; then the package's settings on npmjs.com name this repository's `publish.yml`.
