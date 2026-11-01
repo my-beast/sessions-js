@@ -26,4 +26,11 @@ jobs:
       - run: npm test
       - run: npm run test:types
       - run: npm install --global npm@latest
-      - run: npm publish --access public
+      # A version npm has already (0.1.0, published by hand before its tag) is left as it is.
+      - name: Publish
+        run: |
+          if npm view "$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")" version >/dev/null 2>&1; then
+            echo "npm has this version already."
+          else
+            npm publish --access public
+          fi
