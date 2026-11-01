@@ -1,6 +1,6 @@
 {
     "name": "@mybeast/sessions",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Browser SDK for My Beast Sessions (services.my-beast.com/sessions): session recordings of your pages, with the person's yes.",
     "license": "MIT",
     "keywords": [
