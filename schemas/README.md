@@ -5,7 +5,7 @@ module (`services/schemas/sessions`) is the source; each SDK (mybeast/sessions-l
 copy under its own `schemas/` and a test fails when the copy differs from this one (when services/ is there). Change
 a schema only together with the module and both SDKs. Paths are below `MYBEAST_SESSIONS_URL` (`…/sessions`).
 
-The client token is the same contract as Errors' (`services/schemas/errors`) - one token format across MyBeast
+The client token is the same contract as Errors' (`services/schemas/errors`) - one token format across My Beast
 products, each module verifying it with its own project's signing keys.
 
 | File | What |

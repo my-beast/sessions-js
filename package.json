@@ -1,7 +1,7 @@
 {
     "name": "@mybeast/sessions",
     "version": "0.1.0",
-    "description": "Browser SDK for MyBeast Sessions (services.my-beast.com/sessions): session recordings of your pages, with the person's yes.",
+    "description": "Browser SDK for My Beast Sessions (services.my-beast.com/sessions): session recordings of your pages, with the person's yes.",
     "license": "MIT",
     "keywords": [
         "mybeast",
@@ -18,7 +18,7 @@
     "bugs": {
         "url": "https://github.com/my-beast/sessions-js/issues"
     },
-    "author": "MyBeast (https://my-beast.com)",
+    "author": "My Beast (https://my-beast.com)",
     "type": "module",
     "exports": {
         ".": {
