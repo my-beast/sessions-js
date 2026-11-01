@@ -7,7 +7,7 @@ declare(strict_types=1);
  * public key and a client token for a made-up person who said yes just now. It borrows services/ (../../../services,
  * where Sessions is a module) to read the "asuvaan" project's Sessions keys, then signs the token with
  * mybeast/sessions-laravel's own signer (../../laravel), exactly as a host would. Served by
- * `php -S 127.0.0.1:8008 -t js`.
+ * `php -S 127.0.0.1:8008` in sessions/js.
  */
 
 if (! in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {

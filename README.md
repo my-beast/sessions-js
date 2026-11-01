@@ -127,9 +127,11 @@ caught, and rrweb's own errors are swallowed.
 
 ## Demo
 
+For My Beast's own checkout: the demo borrows services/ two folders up.
+
 ```bash
 npm install
-php -S 127.0.0.1:8008 -t js      # or the launch entry mybeast-sessions-js-demo
+php -S 127.0.0.1:8008      # in this folder, or the launch entry mybeast-sessions-js-demo
 ```
 
 Open `http://localhost:8008/examples/demo.html` (localhost: an origin is matched exactly). It reads
@@ -147,6 +149,8 @@ npm install && npm test && npm run test:types   # node --test, then tsc on test-
 ## Releasing
 
 Set `version` in `package.json`, add it to `CHANGELOG.md`, then tag it: `git tag v0.2.0 && git push --tags`. The
-Publish workflow checks that the tag is the version, runs the tests and publishes to npm through npm's trusted
-publishing (no token stored anywhere). The first version goes by hand: `npm publish --access public`, with the npm
-organisation's two-factor code; then the package's settings on npmjs.com name this repository's `publish.yml`.
+Publish workflow checks that the tag is the version, runs the tests and stages it on npm through npm's trusted
+publishing (no token stored anywhere). It goes live when a maintainer approves it with the npm organisation's
+two-factor code: the package's Staged Packages tab on npmjs.com, or `npm stage approve <id>`. The first version went by
+hand (`npm publish --access public`); then the package's settings on npmjs.com named this repository's `publish.yml`
+as its trusted publisher, allowed to stage only.
