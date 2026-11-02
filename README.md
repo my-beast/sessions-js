@@ -1,8 +1,9 @@
 # @mybeast/sessions
 
 The browser SDK of **Sessions** (services.my-beast.com/sessions): an rrweb recording of your pages, masked before it
-leaves the browser, sent in gzip chunks with the person's yes. Plain ES modules, no build step, no framework. Node ≥ 20
-for the tests. Errors are a separate product: `@mybeast/errors`.
+leaves the browser, sent in gzip chunks with the person's yes. Plain ES modules, no framework, and no build step of its
+own: its imports are bare names, so a page needs a bundler (Vite, as a Laravel app has) or an import map. Errors are a
+separate product: `@mybeast/errors`.
 
 ## Install
 
@@ -18,6 +19,24 @@ Its types are in the package (`types/`), for `@mybeast/sessions/mask` too.
 
 ## Use
 
+The least that works, with mybeast/sessions-laravel's config in a Blade layout (`window.myBeast.sessions`, its
+README's "Use"):
+
+```js
+import { init, createRecorder } from '@mybeast/sessions';
+
+createRecorder(init(window.myBeast?.sessions)).start();   // no config, or no yes in its token: nothing is recorded
+```
+
+With no dictionary every word arrives starred, which is safe.
+
+**List the page's origin.** A browser sends only from an origin the project lists, as the address bar shows it
+(`https://app.example.com`, and `http://localhost:8000` for your own machine): the project's Settings → Browser
+origins, in Sessions or in Errors - it is one list for the project. From any other origin the browser gets no answer,
+and the recorder stops after three chunks.
+
+With the options most hosts set:
+
 ```js
 import { init, createRecorder } from '@mybeast/sessions';
 
@@ -25,7 +44,11 @@ import { init, createRecorder } from '@mybeast/sessions';
 const client = init(config); // null when anything is malformed: the recorder then does nothing
 
 const recorder = createRecorder(client, {
-    getToken: async () => (await fetch('/sessions/token')).text(), // a fresh client token, or null
+    // a fresh token from a route of yours (sessions-laravel's README has one): 204 when there is none
+    getToken: async () => {
+        const response = await fetch('/sessions/token');
+        return response.status === 200 ? response.text() : null;
+    },
     dictionary: () => [...ownUiStrings],          // the only words a masked recording keeps readable
     currentPage: () => currentRouteName,          // the host's page name for `page` marks
     onChange: (state) => {},                      // {status, recording, upload}
@@ -125,9 +148,14 @@ the token's `consent_at` (the service refuses events from more than 5 s before t
 in the queue; one sent as the page leaves cannot be sent again. Nothing here throws into your page: every listener is wrapped, every promise
 caught, and rrweb's own errors are swallowed.
 
-## Demo
+## Working on this SDK
 
-For My Beast's own checkout: the demo borrows services/ two folders up.
+For whoever changes the SDK, in its repository: the npm package holds only `src/`, `schemas/` and `types/`, and the
+demo uses My Beast's own local checkout.
+
+### Demo
+
+In My Beast's own checkout: the demo borrows services/ two folders up.
 
 ```bash
 npm install
@@ -140,13 +168,15 @@ module: its "asuvaan" project lists `http://localhost:8008` as an origin, and a 
 `consent_at`), records the page, and shows the recording id and the last upload's answer. Type in the form, open the
 dialog, change the page, throw an error: the private card and everything outside the demo's dictionary arrive starred.
 
-## Tests
+### Tests
+
+Node 20 or newer.
 
 ```bash
 npm install && npm test && npm run test:types   # node --test, then tsc on test-d/; schemas/ must equal services/schemas/sessions (when services/ is there)
 ```
 
-## Releasing
+### Releasing
 
 Set `version` in `package.json`, add it to `CHANGELOG.md`, then tag it: `git tag v0.2.0 && git push --tags`. The
 Publish workflow checks that the tag is the version, runs the tests and stages it on npm through npm's trusted
