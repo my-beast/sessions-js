@@ -438,6 +438,17 @@ test('the chunk URL: /v1/parts/{id} with key, token, doc and seq in the query', 
     assert.equal(new URL(chunkUrl({ url: 'http://localhost:8007', key }, { id: ID_A, doc: 1, seq: 0 })).searchParams.has('t'), false);
 });
 
+test("the chunk URL says the browser's clock as the request leaves: sent, unix ms - left out when not given", () => {
+    const chunk = { id: ID_A, doc: 2, seq: 17 };
+    const parsed = new URL(chunkUrl({ url: 'https://sessions.example.com', key, token }, chunk, 1_794_471_459_972));
+    assert.deepEqual([...parsed.searchParams.keys()], ['key', 't', 'doc', 'seq', 'sent']);
+    assert.equal(parsed.searchParams.get('sent'), '1794471459972');
+    assert.equal(new URL(chunkUrl({ url: 'https://sessions.example.com', key }, chunk, 1_794_471_459_972.6)).searchParams.get('sent'), '1794471459972', 'whole milliseconds');
+    for (const none of [undefined, null, 0, -5, NaN, Infinity, '1794471459972', {}]) {
+        assert.equal(new URL(chunkUrl({ url: 'https://sessions.example.com', key }, chunk, none)).searchParams.has('sent'), false, String(none));
+    }
+});
+
 test('an upload is a CORS-simple POST: text/plain, no credentials, no other header', () => {
     const body = new Uint8Array([1, 2]);
     const init = uploadInit(body, true);

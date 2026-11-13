@@ -125,9 +125,11 @@ fields; any other tag is masked as described under `mark()`.
 
 One recording per tab (sessionStorage `mybeast-rec-*`), carried across full page loads as documents 1, 2, …; a
 duplicated tab takes its own (BroadcastChannel `mybeast-rec`). Chunks go every 5 s and on every page change, one
-request at a time: `POST {url}/v1/parts/{recording}?key=&t=&doc=&seq=`, the gzip of a JSON array of events,
+request at a time: `POST {url}/v1/parts/{recording}?key=&t=&doc=&seq=&sent=`, the gzip of a JSON array of events,
 `Content-Type: text/plain`, no credentials, no other header - CORS-simple, so the last chunk can ride `keepalive`
-(under 60 000 bytes) as the page goes away. What a page could not send waits in the tab for the next page, without
+(under 60 000 bytes) as the page goes away. `sent` is this browser's clock as the request leaves, read again on every
+try: Sessions sets the recording's times on its own clock by it, so a device whose clock is off still shows the right
+moments and lengths. What a page could not send waits in the tab for the next page, without
 its token. Each chunk goes with the token it was recorded under. Recording waits while the browser's clock is behind
 the token's `consent_at` (the service refuses events from more than 5 s before the yes).
 
@@ -137,7 +139,7 @@ the token's `consent_at` (the service refuses events from more than 5 s before t
 | 401 | sends again with a fresher token (`setToken`'s, or `getToken`'s); none: stops until `setToken` |
 | 402 | stops recording on this page: the project's subscription has ended |
 | 403 | stops recording on this page (a refused leftover of an earlier recording is only dropped) |
-| 403 `before-consent` | drops that chunk only: it began before the yes (a leftover, or this browser's clock behind the host's) |
+| 403 `before-consent` | drops that chunk only: it began before the yes (a tab's leftover) |
 | 404 / 409 | starts a new recording; a second refusal in a row stops |
 | 413 | splits the chunk and sends the halves; one event too big is dropped and a new snapshot taken |
 | 422 | drops the chunk |

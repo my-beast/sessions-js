@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://sessions.my-beast.com/schemas/v1/recording-chunk.schema.json",
     "title": "One recording chunk, unpacked",
-    "description": "The body of POST /v1/parts/{recording}?key=&t=&doc=&seq= is the gzip of this: a JSON array of rrweb 2.1.7 events, in the order they happened. The service reads only each event's type and timestamp, Meta events (4: the page's size) and Custom events (5) with a tag it knows; everything else is stored and replayed as sent. Text must already be masked when the token says mask: true - the service scans for leaks and refuses the chunk, it never repairs one.",
+    "description": "The body of POST /v1/parts/{recording}?key=&t=&doc=&seq=&sent= is the gzip of this: a JSON array of rrweb 2.1.7 events, in the order they happened. The service reads only each event's type and timestamp, Meta events (4: the page's size) and Custom events (5) with a tag it knows; everything else is stored and replayed as sent. Text must already be masked when the token says mask: true - the service scans for leaks and refuses the chunk, it never repairs one.",
     "type": "array",
     "minItems": 1,
     "items": {
@@ -35,7 +35,7 @@
                                 "tag": {
                                     "type": "string",
                                     "maxLength": 32,
-                                    "description": "The marks the service and the player read: env {path, w, h, lang, translated?, rotated?} (a document starts), page {name, url} (the host's page changed), press {label, tag} (a control was pressed), dialog {open, title}, refused {fields: [names], first?} (a form was refused), error {name, message} (an error in the browser), visit {phase: start|finish, method, url} (a request the page sent), broken {kind} (the server answered with an error), hidden / visible (the tab was left / came back), pagehide (the page is going). Others are kept and shown as they are."
+                                    "description": "The marks the service and the player read: env {path, w, h, lang, translated?, rotated?} (a document starts), page {name, url} (the host's page changed), press {label, tag, role?, href?} (a control was pressed: label is what it says to the person - for a checkbox, a radio or a select its own label's words, never its value; a press on a label that the browser hands on to the label's control is one press, told once), dialog {open, title}, refused {fields: [names], first?} (a form was refused), error {name, message} (an error in the browser), visit {phase: start|finish, method, url} (a request the page sent), broken {kind} (the server answered with an error), hidden / visible (the tab was left / came back), pagehide (the page is going). Others are kept and shown as they are."
                                 },
                                 "payload": {
                                     "type": "object"

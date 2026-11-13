@@ -19,7 +19,7 @@ products, each module verifying it with its own project's signing keys.
 
 ## Uploading a chunk
 
-`POST /v1/parts/{recording}?key=pk_…&t=<client token>&doc=<0-65535>&seq=<0-4294967295>`
+`POST /v1/parts/{recording}?key=pk_…&t=<client token>&doc=<0-65535>&seq=<0-4294967295>&sent=<unix ms>`
 
 - `{recording}`: a UUID the browser mints (`crypto.randomUUID()`); its first stored chunk binds it to the token's
   subject and account for good.
@@ -28,8 +28,14 @@ products, each module verifying it with its own project's signing keys.
 - The body is the gzip of a `recording-chunk` array: at most 2 MiB as sent and 16 MiB unpacked (the gzip trailer's
   size is checked first). `Content-Type: text/plain`, no credentials: a CORS-simple request, so `keepalive` works as
   the page goes away (keep a keepalive body under 60 000 bytes - the browser's 64 KiB budget is shared).
-- The token must say `rec: true` with a `consent_at`; a chunk whose first event is more than 5 s before
-  `consent_at` is refused. With `mask: true` the service scans the unpacked chunk for e-mail addresses, Finnish
+- `sent` (optional): the browser's clock as the request leaves it, unix milliseconds, read again on every try. From
+  a recording's first stored chunk the service learns how far the browser's clock is from its own (`sent` against
+  the moment the chunk arrives) and holds the whole recording to that: its start, its length and the presses and
+  dialogs it adds to the journey are on the service's clock, in step with the host server's steps. Without `sent`
+  only a clock running ahead is set right (no chunk holds events from after it arrived), by that chunk's latest
+  event. The stored events keep the browser's timestamps.
+- The token must say `rec: true` with a `consent_at`; a chunk whose first event, on the service's clock, is more
+  than 5 s before `consent_at` is refused. With `mask: true` the service scans the unpacked chunk for e-mail addresses, Finnish
   personal ids, IBANs, phone numbers in international form and card numbers before anything is stored.
 
 | Answer | Means | The SDK |
@@ -40,7 +46,7 @@ products, each module verifying it with its own project's signing keys.
 | 403 `{"refused":"monthly-limit"}` | A new recording past the project's recordings this month (its package's, until the 1st UTC); a recording already open goes on | stops recording on this page |
 | 402 | The project's subscription has ended | stops recording on this page |
 | 403 `{"refused":"erased"}` | The recording was deleted or its person's or account's recordings erased while this tab still recorded (for a day after) | stops recording on this page |
-| 403 `{"refused":"before-consent"}` | This chunk starts more than 5 s before `consent_at` (a tab's leftovers, or a browser clock behind the host's) | drops this chunk only; waits for its clock to pass `consent_at` before recording |
+| 403 `{"refused":"before-consent"}` | This chunk starts more than 5 s before `consent_at` (a tab's leftovers, or - sent with no `sent` - a browser clock behind the host's) | drops this chunk only; waits for its clock to pass `consent_at` before recording |
 | 404 | The recording id is another subject's | starts a new recording |
 | 409 | The recording was made for another account, masked the other way, or under a token with another `test` mark (`{"refused":"account"\|"masking"\|"test"}`) | starts a new recording |
 | 413 | Too big | splits the chunk and sends the halves |
@@ -78,8 +84,9 @@ All with the server secret (`Authorization: Bearer sk_….…`).
 | `DELETE /api/v1/subjects/{subject}/objection` | The objection is lifted | 204 |
 | `DELETE /api/v1/subjects/{subject}/journey` | The person's journey erased (steps, flow runs, stuck occurrences) | 200 `{"erased": n}` |
 
-A recording's presses and dialogs join its person's journey from the chunk ingest (the `press` and `dialog` marks, on
-the browser's clock); a server step and a recording meet in one visit by person and time, not by the visit key.
+A recording's presses and dialogs join its person's journey from the chunk ingest (the `press` and `dialog` marks, at
+their moments on the service's clock: `sent`, above); a server step and a recording meet in one visit by person and
+time, not by the visit key.
 
 A step may name its request (`request`: the id the host's log lines carry - its answer's `X-Request-Id`, which
 mybeast/logs-laravel sets): the replay then opens exactly that request's lines in Logs. Send it only when there is one -

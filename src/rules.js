@@ -335,13 +335,20 @@ export function splitJson(json) {
     }
 }
 
-/** POST target of one chunk: {url}/v1/parts/{recording}?key=&t=&doc=&seq= - the public key and token ride the query. */
-export function chunkUrl({ url, key, token = null }, { id, doc, seq }) {
+/**
+ * POST target of one chunk: {url}/v1/parts/{recording}?key=&t=&doc=&seq=&sent= - the public key and token ride the
+ * query. `sent` is this browser's clock as the request leaves (unix ms, read again on every try): Sessions sets the
+ * recording's times on its own clock by it, so a device whose clock is off still shows the right moments. Left out
+ * when not given.
+ */
+export function chunkUrl({ url, key, token = null }, { id, doc, seq }, sent = null) {
     const target = new URL(`${String(url).replace(/\/+$/, '')}/v1/parts/${encodeURIComponent(id)}`);
     target.searchParams.set('key', key);
     if (token) target.searchParams.set('t', token);
     target.searchParams.set('doc', String(doc));
     target.searchParams.set('seq', String(seq));
+    const at = typeof sent === 'number' ? Math.floor(sent) : NaN;
+    if (Number.isSafeInteger(at) && at > 0) target.searchParams.set('sent', String(at));
 
     return target.toString();
 }

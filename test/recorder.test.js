@@ -9,7 +9,7 @@ import Ajv from 'ajv';
 import { init } from '../src/client.js';
 import { createRecorder } from '../src/recorder.js';
 import { KEYS, isUuid } from '../src/rules.js';
-import { element, fakeFetch, fakeRrweb, fakeWindow, memoryStore, settle, tokenFor } from './fakes.js';
+import { element, fakeFetch, fakeRrweb, fakeWindow, memoryStore, settle, textNode, tie, tokenFor } from './fakes.js';
 import { clientTokenFixture, readJson, schemaDir } from './fixtures.js';
 
 const { public_key: key } = clientTokenFixture();
@@ -44,6 +44,18 @@ function started(context) {
 
 const marks = (events, tag) => events.filter((e) => e.type === 5 && e.data.tag === tag).map((e) => e.data.payload);
 
+/** Runs `fn(advance)` on a clock the test moves by hand (Date.now), and puts the real one back. */
+async function onClock(fn) {
+    const realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+        return await fn((ms) => { now += ms; }, () => now);
+    } finally {
+        Date.now = realNow;
+    }
+}
+
 test('records while the token allows it, and uploads a CORS-simple gzip chunk that fits the contract', async () => {
     const { rr, net, recorder, changes, client } = started(setup());
 
@@ -62,6 +74,7 @@ test('records while the token allows it, and uploads a CORS-simple gzip chunk th
     assert.equal(new URL(url).origin + new URL(url).pathname, `https://sessions.example.com/v1/parts/${recording.id}`);
     assert.equal(new URL(url).searchParams.get('key'), key);
     assert.deepEqual([id, doc, seq, token], [recording.id, 1, 0, client.token]);
+    assert.ok(Math.abs(net.calls[0].sent - Date.now()) < 5000, "sent: this browser's clock as the request left");
     assert.equal(request.method, 'POST');
     assert.equal(request.mode, 'cors');
     assert.equal(request.credentials, 'omit');
@@ -244,6 +257,27 @@ test('429, 5xx and no answer: three tries, then the chunk is let go', async () =
     assert.deepEqual(net.calls.map((c) => c.seq), [0, 0, 0]);
     assert.equal(recorder.state().upload.answer, 'retry');
     assert.equal(recorder.state().status, 'recording');
+});
+
+test("every upload says the browser's clock as it leaves, read again on each try and for a keepalive", async () => {
+    await onClock(async (advance, now) => {
+        const { net, recorder, win } = started(setup({ answers: [503, 204] }));
+        const first = now();
+        recorder.flush();
+        await settle();
+        advance(5000);
+        win.tick(); // the same chunk, tried again
+        await settle();
+        assert.equal(net.calls.length, 2);
+        assert.deepEqual([net.calls[1].doc, net.calls[1].seq], [net.calls[0].doc, net.calls[0].seq]);
+        assert.deepEqual(net.calls.map((c) => c.sent), [first, first + 5000], 'the clock of each try, not of the first');
+
+        advance(1200);
+        win.fire('pagehide');
+        await settle();
+        assert.equal(net.calls[2].init.keepalive, true);
+        assert.equal(net.calls[2].sent, first + 6200);
+    });
 });
 
 test('a 402 (the subscription ended) stops recording on this page', async () => {
@@ -430,6 +464,156 @@ test('built-in marks: press, error, hidden / visible, and the page name from cur
     assert.equal(errors[1].name, 'Error');
     assert.equal(marks(events, 'hidden').length, 1);
     assert.equal(marks(events, 'visible').length, 1);
+});
+
+const WORDS = ['Save', 'Remember me', 'Weekly digest', 'Mixing and mastering', 'Genre', 'Name', 'Terms', 'Pin this'];
+
+/** The press marks of what `press(win)` does on a recording page. */
+async function presses(press, options = {}) {
+    const { net, recorder, win } = started(setup({ dictionary: WORDS, ...options }));
+    await press(win);
+    recorder.flush();
+    await settle();
+
+    return marks(net.calls.flatMap((c) => c.events), 'press');
+}
+
+test('a checkbox, a radio or a select is told by its label, never by its value or its options', async () => {
+    const got = await presses((win) => {
+        // <label><input type="checkbox"> Remember me</label>: pressed on its words, then on the box itself.
+        const box = element('INPUT', '', { type: 'checkbox', value: 'on' });
+        const wrapping = element('LABEL', 'Remember me', { children: [box, textNode(' Remember me')] });
+        tie(wrapping, box);
+        win.fireDoc('click', { target: wrapping });
+        win.fireDoc('click', { target: box }); // the browser hands the label's press on to its control
+        win.fireDoc('click', { target: box }); // the box itself
+
+        // <label for="digest">Weekly digest</label> … <input type="checkbox" id="digest">
+        const digest = element('INPUT', '', { type: 'checkbox', value: 'on' });
+        const forIt = element('LABEL', 'Weekly digest');
+        tie(forIt, digest);
+        win.fireDoc('click', { target: forIt });
+        win.fireDoc('click', { target: digest });
+
+        // A radio whose value is "yes": by its label; with no label at all, by nothing.
+        const radio = element('INPUT', '', { type: 'radio', value: 'yes' });
+        tie(element('LABEL', 'Mixing and mastering', { children: [radio, textNode('Mixing and mastering')] }), radio);
+        win.fireDoc('click', { target: radio });
+        win.fireDoc('click', { target: element('INPUT', '', { type: 'radio', value: 'yes' }) });
+
+        // <label>Genre <select>…</select></label>: the select's text is its options, the label's includes them.
+        const select = element('SELECT', 'Rock Metal Opera', { type: 'select-one', value: '7' });
+        const genre = element('LABEL', 'Genre Rock Metal Opera', { children: [textNode('Genre '), select] });
+        tie(genre, select);
+        win.fireDoc('click', { target: select });
+        win.fireDoc('click', { target: genre });
+        win.fireDoc('click', { target: select }); // handed on
+    });
+
+    assert.deepEqual(got, [
+        { label: 'Remember me', tag: 'label', role: 'checkbox', href: '' },
+        { label: 'Remember me', tag: 'input', role: 'checkbox', href: '' },
+        { label: 'Weekly digest', tag: 'label', role: 'checkbox', href: '' },
+        { label: 'Mixing and mastering', tag: 'input', role: 'radio', href: '' },
+        { label: '', tag: 'input', role: 'radio', href: '' },
+        { label: 'Genre', tag: 'select', role: '', href: '' },
+        { label: 'Genre', tag: 'label', role: '', href: '' },
+    ]);
+    assert.ok(!got.some((p) => ['on', 'yes', '7'].includes(p.label)), 'never a value');
+});
+
+test("a value is a name only on an input that is a button; aria-labelledby and a label's own control are read as the page says them", async () => {
+    const got = await presses((win) => {
+        // <label for="go">Remember me</label> <input type="submit" id="go" value="Save">: what it says is its caption.
+        const go = element('INPUT', '', { type: 'submit', value: 'Save' });
+        tie(element('LABEL', 'Remember me'), go);
+        win.fireDoc('click', { target: go });
+        win.fireDoc('click', { target: element('INPUT', '', { type: 'button', value: '', title: 'Name' }) }); // no caption: its title
+        win.fireDoc('click', { target: element('BUTTON', '', { type: 'submit', value: '42' }) }); // an icon button: its value is data
+
+        // <label>Name <input type="text"></label>: pressed in the field, one mark, the label's, as before; pressed on
+        // its words, the click the browser hands on to the field is the same press.
+        const field = element('INPUT', '', { type: 'text', value: 'Liisa Virtanen', pressable: false });
+        const name = element('LABEL', 'Name', { children: [textNode('Name '), field] });
+        tie(name, field);
+        field.closest = (selector) => (selector.includes('data-mybeast-private') ? null : name);
+        win.fireDoc('click', { target: field });
+        win.fireDoc('click', { target: name });
+        win.fireDoc('click', { target: field }); // handed on
+
+        // aria-labelledby names the element that says it, before any label.
+        win.document.getElementById = (id) => (id === 'terms-title' ? element('H3', 'Terms') : null);
+        const terms = element('INPUT', '', { type: 'checkbox', value: 'on', labelledBy: 'terms-title missing' });
+        tie(element('LABEL', 'Remember me'), terms);
+        win.fireDoc('click', { target: terms });
+
+        // A label that says nothing (an icon around its box) is told by its control's name.
+        const pin = element('INPUT', '', { type: 'checkbox', value: 'on', label: 'Pin this' });
+        const icon = element('LABEL', '', { children: [pin] });
+        tie(icon, pin);
+        win.fireDoc('click', { target: icon });
+        win.fireDoc('click', { target: pin }); // handed on
+
+        // Words in a private part stay private, wherever the control they name stands.
+        const shared = element('INPUT', '', { type: 'checkbox', value: 'on' });
+        tie(element('LABEL', 'Remember me', { privateAncestor: true }), shared);
+        win.fireDoc('click', { target: shared });
+    });
+
+    assert.deepEqual(got, [
+        { label: 'Save', tag: 'input', role: '', href: '' },
+        { label: 'Name', tag: 'input', role: '', href: '' },
+        { label: '', tag: 'button', role: '', href: '' },
+        { label: 'Name', tag: 'label', role: '', href: '' },
+        { label: 'Name', tag: 'label', role: '', href: '' },
+        { label: 'Terms', tag: 'input', role: 'checkbox', href: '' },
+        { label: 'Pin this', tag: 'label', role: 'checkbox', href: '' },
+        { label: '******** **', tag: 'input', role: 'checkbox', href: '' },
+    ]);
+    assert.deepEqual(leaks(got), []);
+});
+
+test("a label's press is told once - not again for the click the browser hands on to its control", async () => {
+    await onClock(async (advance) => {
+        const got = await presses((win) => {
+            const box = element('INPUT', '', { type: 'checkbox', value: 'on' });
+            const label = element('LABEL', 'Remember me', { children: [box, textNode(' Remember me')] });
+            tie(label, box);
+            const press = () => {
+                win.fireDoc('click', { target: label });
+                advance(2);
+                win.fireDoc('click', { target: box });
+            };
+            press();
+            advance(300);
+            press(); // again 300 ms later: a press of its own
+            advance(100);
+            win.fireDoc('click', { target: box }); // the box itself, right after: the hand-over was used up
+
+            // A page that keeps the label's click from its control: the label's mark is the only one, and a press on
+            // the box itself after that is a press.
+            advance(1000);
+            win.fireDoc('click', { target: label });
+            advance(300);
+            win.fireDoc('click', { target: box });
+
+            // A control that is switched off gets nothing handed on.
+            const off = element('INPUT', '', { type: 'checkbox', value: 'on', disabled: true });
+            const greyed = element('LABEL', 'Weekly digest', { children: [off, textNode(' Weekly digest')] });
+            tie(greyed, off);
+            advance(1000);
+            win.fireDoc('click', { target: greyed });
+        });
+
+        assert.deepEqual(got.map((p) => [p.tag, p.label, p.role]), [
+            ['label', 'Remember me', 'checkbox'],
+            ['label', 'Remember me', 'checkbox'],
+            ['input', 'Remember me', 'checkbox'],
+            ['label', 'Remember me', 'checkbox'],
+            ['input', 'Remember me', 'checkbox'],
+            ['label', 'Weekly digest', ''],
+        ]);
+    });
 });
 
 test('one recording per tab across page loads: the next document, or a new one for someone else', () => {

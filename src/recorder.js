@@ -15,6 +15,8 @@
 //   request (the browser's 64 KiB keepalive budget is shared with the page's other beacons, @mybeast/errors' too).
 // - Each chunk goes with the token it was recorded under, so a page that may not be recorded still sends what the
 //   page before it recorded. A 401 asks the host for a fresh token (`getToken`); so does a token about to run out.
+// - Each upload says this browser's clock as it leaves (`sent`, read again on every try): Sessions sets the
+//   recording's times on its own clock by it, so a device whose clock is off still shows the right moments.
 // - Nothing here may break the host page: every listener is wrapped, every promise caught, and rrweb's errorHandler
 //   swallows rrweb's own errors.
 //
@@ -86,6 +88,11 @@ const CONTROL = [
     '[role="option"]', '[role="switch"]', '[role="checkbox"]', '[role="radio"]', 'input[type="checkbox"]',
     'input[type="radio"]', 'input[type="submit"]', 'input[type="button"]',
 ].join(', ');
+// An input that is a button: its value is its caption. Any other value is data ("on", "yes", an id), never a name.
+const CAPTION_INPUTS = ['submit', 'button', 'reset'];
+// A press on a label comes again as a click on the label's control (the browser hands it on at once): within this
+// long it is the same press.
+const HANDED_ON_MS = 250;
 const DIALOG = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog[open]';
 const DIALOG_TITLE = 'h1, h2, h3, [data-dialog-title]';
 // Unmasked, only the host's explicit "never record this" is blocked.
@@ -302,6 +309,7 @@ function build(client, options) {
         dialogs: [],
         dialogTimer: null,
         observer: null,
+        handed: null, // the control the browser hands a label's press on to, and when: {el, at}
         refreshing: null, // the getToken call in flight
         earlyRefreshAt: 0,
         pageName: null,
@@ -700,7 +708,7 @@ function build(client, options) {
         try {
             const body = await gzip(chunk.json);
             bytes = body.byteLength;
-            const response = await send(chunkUrl({ url: client.url, key: client.key, token: chunk.token }, chunk), uploadInit(body, false));
+            const response = await send(chunkUrl({ url: client.url, key: client.key, token: chunk.token }, chunk, Date.now()), uploadInit(body, false));
             status = Number(response?.status) || 0;
             // A 403 says why in its body: only `before-consent` concerns this one chunk (rules.js answerFor).
             if (status === 403 && typeof response.json === 'function') refused = await response.json().then((body) => body?.refused ?? null, () => null);
@@ -847,7 +855,7 @@ function build(client, options) {
                     announce();
                 };
                 Promise.resolve()
-                    .then(() => send(chunkUrl({ url: client.url, key: client.key, token: newest.token }, newest), uploadInit(body, true)))
+                    .then(() => send(chunkUrl({ url: client.url, key: client.key, token: newest.token }, newest, Date.now()), uploadInit(body, true)))
                     .then(done, () => done(null));
             }).catch(() => {});
         }
@@ -895,20 +903,74 @@ function build(client, options) {
 
     // What the control says to the person: its text without what is hidden from them - by CSS (a phone's short label
     // beside the desktop's long one) or aria-hidden (a bold copy that keeps a tab's width) - and with the break
-    // between a card's title and its line kept, where textContent glues them together.
-    function spoken(node) {
+    // between a card's title and its line kept, where textContent glues them together. `skip` is left out with all
+    // inside it: a label's own control (a select's options, a text field's words are not the label's).
+    function spoken(node, skip = null) {
+        if (node === skip) return '';
         if (node.nodeType === 3) return node.textContent;
         if (node.nodeType !== 1 || node.getAttribute('aria-hidden') === 'true') return '';
         // `display: contents` draws no box of its own (checkVisibility says no): its children decide.
         const boxless = win.getComputedStyle?.(node)?.display === 'contents';
         if (!boxless && typeof node.checkVisibility === 'function' && !node.checkVisibility()) return '';
-        if (!boxless && !node.querySelector('[aria-hidden="true"]')) return node.innerText ?? node.textContent ?? '';
+        const around = skip !== null && typeof node.contains === 'function' && node.contains(skip);
+        if (!boxless && !around && !node.querySelector('[aria-hidden="true"]')) return node.innerText ?? node.textContent ?? '';
 
-        return Array.from(node.childNodes, spoken).join(' ');
+        return Array.from(node.childNodes ?? [], (child) => spoken(child, skip)).join(' ');
     }
 
+    const tagOf = (el) => String(el?.tagName ?? '').toLowerCase();
+    const typeOf = (el) => String(el?.type ?? '').toLowerCase();
+
+    /** The control a label is for (HTMLLabelElement.control): the one it wraps or names with `for`. */
+    const controlOf = (label) => (label.control && label.control.nodeType === 1 ? label.control : null);
+
+    /** A control a press is marked on by itself (a checkbox, a button), as against a text field. */
+    function pressable(el) {
+        try {
+            return typeof el.matches === 'function' && el.matches(CONTROL);
+        } catch {
+            return false;
+        }
+    }
+
+    /** Its role as the page says it; a native checkbox or radio has one without saying so. */
+    function roleOf(el) {
+        const said = el.getAttribute('role');
+        if (said) return said;
+        const type = tagOf(el) === 'input' ? typeOf(el) : '';
+
+        return type === 'checkbox' || type === 'radio' ? type : '';
+    }
+
+    /**
+     * What a control is called, as the person reads it, masked where it stands: its aria-label; the elements
+     * aria-labelledby names; its own words - an input that is a button says its value, a select says none (its text
+     * is its options), a label says its own without its control's; then its labels' words (wrapping it, or `for` it);
+     * then its title. Never a checkbox's, a radio's or a select's value: "on", "yes", an id.
+     */
     function labelOf(el) {
-        return el.getAttribute('aria-label') || spoken(el) || el.getAttribute('title') || el.value || '';
+        const tag = tagOf(el);
+        const told = (text, at) => {
+            const said = typeof text === 'string' ? text.trim() : '';
+            if (!said) return '';
+
+            return (s.masking ? mask.text(said, at) : said) ?? '';
+        };
+        const all = (nodes) => nodes.map((node) => told(spoken(node, el), node)).filter(Boolean).join(' ');
+        const ids = String(el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+        const named = ids.length && typeof doc.getElementById === 'function' ? ids.map((id) => doc.getElementById(id)).filter(Boolean) : [];
+        const own = () => {
+            if (tag === 'select') return '';
+            if (tag === 'input') return CAPTION_INPUTS.includes(typeOf(el)) ? el.value : '';
+
+            return spoken(el, tag === 'label' ? controlOf(el) : null);
+        };
+
+        return told(el.getAttribute('aria-label'), el)
+            || all(named)
+            || told(own(), el)
+            || all(tag === 'label' ? [] : Array.from(el.labels ?? []))
+            || told(el.getAttribute('title'), el);
     }
 
     function titleOf(dialog) {
@@ -991,13 +1053,27 @@ function build(client, options) {
 
     on(doc, 'click', (e) => {
         if (!running()) return;
+        // A press on a label comes again as a click on the label's control, handed on by the browser: one press, told
+        // once, by the label's mark - which a page that keeps the click from its control still leaves.
+        const now = Date.now();
+        if (s.handed && now - s.handed.at > HANDED_ON_MS) s.handed = null;
+        if (s.handed && s.handed.el === e.target) {
+            s.handed = null;
+
+            return;
+        }
         const el = e.target && typeof e.target.closest === 'function' ? e.target.closest(CONTROL) : null;
         if (!el) return;
-        const label = labelOf(el);
+        const control = tagOf(el) === 'label' ? controlOf(el) : null;
+        const handsOn = control !== null && control !== e.target && !control.disabled;
+        if (handsOn) s.handed = { el: control, at: now };
+        // The label stands for its control when that is one marked by itself: a checkbox, not a text field.
+        const stands = handsOn && pressable(control) ? control : null;
         emitMark('press', pressPayload({
-            label: s.masking ? mask.text(label, el) : label,
+            // A label that says nothing (an icon, only its box) is told by that control's name.
+            label: labelOf(el) || (stands ? labelOf(stands) : ''),
             tag: el.tagName,
-            role: el.getAttribute('role'),
+            role: roleOf(el) || (stands ? roleOf(stands) : ''),
             href: el.tagName === 'A' ? el.getAttribute('href') : '',
         }));
     }, true);

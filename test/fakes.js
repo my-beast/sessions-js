@@ -87,18 +87,43 @@ export function fakeWindow({ store = memoryStore(), path = '/properties/77', sea
     return win;
 }
 
-/** One element as the click listener sees it. */
-export function element(tag, text, { label = null, privateAncestor = false, href = null } = {}) {
+/**
+ * One element as the click listener sees it. `text` is its innerText (a label's includes what its control shows: a
+ * select's options). `pressable: false` is an element the recorder does not mark by itself (a text field): a click on
+ * it is its `inside`'s (the label around it). `children` are its child nodes, for the words read around a control.
+ */
+export function element(tag, text, {
+    label = null, privateAncestor = false, href = null, role = null, title = null, labelledBy = null,
+    type = undefined, value = undefined, disabled = false, pressable = true, inside = null, children = [],
+} = {}) {
+    const attributes = { 'aria-label': label, href, role, title, 'aria-labelledby': labelledBy };
     const el = {
         nodeType: 1,
         tagName: tag,
         innerText: text,
         textContent: text,
-        getAttribute: (name) => (name === 'aria-label' ? label : name === 'href' ? href : null),
+        type,
+        value,
+        disabled,
+        childNodes: children,
+        getAttribute: (name) => attributes[name] ?? null,
         querySelector: () => null,
-        closest: (selector) => (selector.includes('data-mybeast-private') ? (privateAncestor ? {} : null) : el),
+        matches: () => pressable,
+        contains: (node) => node === el || el.childNodes.some((child) => child === node || child.contains?.(node) === true),
+        closest: (selector) => (selector.includes('data-mybeast-private') ? (privateAncestor ? {} : null) : pressable ? el : inside),
     };
     return el;
+}
+
+/** A text node. */
+export const textNode = (text) => ({ nodeType: 3, textContent: text });
+
+/** A label and the control it is for, tied as the DOM ties them (wrapping it or by `for`): label.control, control.labels. */
+export function tie(label, control) {
+    label.control = control;
+    control.labels = [...(control.labels ?? []), label];
+
+    return control;
 }
 
 /** An rrweb full snapshot: a button the dictionary knows and a private card with a person in it. */
@@ -162,6 +187,7 @@ export function fakeFetch(answers = []) {
             token: parsed.searchParams.get('t'),
             doc: Number(parsed.searchParams.get('doc')),
             seq: Number(parsed.searchParams.get('seq')),
+            sent: parsed.searchParams.has('sent') ? Number(parsed.searchParams.get('sent')) : null,
             events: JSON.parse(gunzipSync(init.body).toString('utf8')),
         });
         const next = answers.length ? answers.shift() : 204;
